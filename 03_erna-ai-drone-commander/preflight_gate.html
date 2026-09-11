@@ -1,0 +1,708 @@
+<title>ERNA · Pre-Flight Go / No-Go</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+/* =====================================================================
+   ERNA PRE-FLIGHT GO / NO-GO GATE
+   A night-ops field instrument. Committed dark theme by design —
+   used at the flight line in the dark, glare matters.
+   Every gate traces to a real ERNA lesson. Nothing here is generic.
+   ===================================================================== */
+:root{
+  --bg:#0C1016;
+  --bg2:#10161F;
+  --panel:#141C26;
+  --panel2:#1A2431;
+  --line:#243040;
+  --line-soft:#1C2732;
+  --text:#ECEAE3;
+  --muted:#93A2B2;
+  --faint:#61748A;
+  --amber:#F4A63A;         /* NEMYX brand chrome */
+  --amber-soft:rgba(244,166,58,.13);
+  --go:#5FCf8a;            /* green = GO / pass */
+  --go-soft:rgba(95,207,138,.13);
+  --nogo:#EA6A54;          /* red = NO-GO / fail */
+  --nogo-soft:rgba(234,106,84,.13);
+  --caution:#E8C15A;       /* amber-caution / advisory */
+  --na:#5E7183;
+  --mono:ui-monospace,'SF Mono','Cascadia Mono',Consolas,Menlo,monospace;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,Ubuntu,sans-serif;
+  --fs:1;                  /* font-scale multiplier, toggled by A/A+ */
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+html,body{margin:0}
+body{
+  background:
+    radial-gradient(1200px 500px at 50% -10%, #131b26 0%, transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:calc(17px * var(--fs));
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  letter-spacing:.005em;                 /* mild tracking aids dyslexic reading */
+  padding-bottom:120px;
+}
+::selection{background:var(--amber);color:#0C1016}
+
+/* ---------- classification strip ---------- */
+.classbar{
+  text-align:center;font-family:var(--mono);
+  font-size:calc(11px * var(--fs));letter-spacing:.26em;text-transform:uppercase;
+  color:var(--amber);background:var(--amber-soft);
+  border-bottom:1px solid rgba(244,166,58,.3);padding:6px 10px 5px;
+}
+
+/* ---------- sticky header + live verdict ---------- */
+header{
+  position:sticky;top:0;z-index:20;
+  background:linear-gradient(180deg,var(--bg2),rgba(16,22,31,.94));
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.hrow{
+  max-width:820px;margin:0 auto;padding:14px 20px;
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+}
+.mark{display:flex;align-items:center;gap:12px;flex:1 1 auto;min-width:210px}
+.mark .name{line-height:1.1}
+.mark .name b{
+  display:block;font-size:calc(19px * var(--fs));font-weight:800;
+  letter-spacing:.11em;text-transform:uppercase;
+}
+.mark .name span{
+  font-family:var(--mono);font-size:calc(11px * var(--fs));
+  letter-spacing:.15em;color:var(--faint);text-transform:uppercase;
+}
+/* the big live verdict pill */
+.verdict{
+  flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:3px;
+}
+.vpill{
+  font-family:var(--mono);font-weight:700;
+  font-size:calc(18px * var(--fs));letter-spacing:.14em;
+  padding:9px 18px 8px;border-radius:5px;border:1.5px solid;text-transform:uppercase;
+  display:flex;align-items:center;gap:9px;transition:all .2s;
+}
+.vpill .ico{font-size:1.05em;line-height:1}
+.v-incomplete{color:var(--muted);border-color:var(--line);background:var(--panel)}
+.v-nogo{color:var(--nogo);border-color:var(--nogo);background:var(--nogo-soft)}
+.v-notes{color:var(--caution);border-color:var(--caution);background:rgba(232,193,90,.1)}
+.v-go{color:var(--go);border-color:var(--go);background:var(--go-soft)}
+.v-go.armed{box-shadow:0 0 0 3px var(--go-soft)}
+.vsub{font-family:var(--mono);font-size:calc(11px * var(--fs));color:var(--faint);letter-spacing:.08em}
+
+/* progress rail */
+.progress{max-width:820px;margin:0 auto;padding:0 20px 12px}
+.ptrack{height:5px;border-radius:3px;background:var(--line-soft);overflow:hidden}
+.pfill{height:100%;width:0;background:linear-gradient(90deg,var(--amber),var(--go));transition:width .3s}
+.pmeta{display:flex;justify-content:space-between;margin-top:6px;
+  font-family:var(--mono);font-size:calc(11px * var(--fs));color:var(--faint);letter-spacing:.06em}
+
+/* ---------- controls bar ---------- */
+.tools{
+  max-width:820px;margin:14px auto 0;padding:0 20px;
+  display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+}
+.tbtn{
+  font-family:var(--mono);font-size:calc(12px * var(--fs));letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);background:var(--panel);
+  border:1px solid var(--line);border-radius:5px;padding:8px 13px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;transition:all .15s;
+}
+.tbtn:hover{border-color:var(--faint);color:var(--text)}
+.tbtn.on{border-color:var(--amber);color:var(--amber);background:var(--amber-soft)}
+.tools .spacer{flex:1}
+
+/* ---------- intro note ---------- */
+.lede{
+  max-width:820px;margin:16px auto 0;padding:16px 20px;
+}
+.lede .card{
+  background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--amber);
+  border-radius:6px;padding:16px 20px;
+}
+.lede p{margin:0;color:var(--muted);font-size:calc(15px * var(--fs))}
+.lede p b{color:var(--text)}
+
+/* ---------- phases ---------- */
+main{max-width:820px;margin:0 auto;padding:8px 20px}
+.phase{margin-top:26px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg2)}
+.phead{
+  width:100%;text-align:left;cursor:pointer;
+  display:flex;align-items:center;gap:14px;
+  background:var(--panel);border:0;color:inherit;
+  padding:15px 18px;border-bottom:1px solid var(--line);
+}
+.phead:hover{background:var(--panel2)}
+.phead .pnum{
+  font-family:var(--mono);font-size:calc(12px * var(--fs));font-weight:700;
+  color:var(--amber);letter-spacing:.1em;background:var(--amber-soft);
+  border:1px solid rgba(244,166,58,.35);border-radius:4px;padding:4px 9px;flex:0 0 auto;
+}
+.phead .ptitle{flex:1;font-weight:800;font-size:calc(16px * var(--fs));letter-spacing:.06em;text-transform:uppercase}
+.phead .pstat{font-family:var(--mono);font-size:calc(12px * var(--fs));letter-spacing:.06em}
+.phead .chev{color:var(--faint);transition:transform .2s;font-size:calc(13px * var(--fs))}
+.phase.collapsed .chev{transform:rotate(-90deg)}
+.phase.collapsed .plist{display:none}
+.plist{padding:6px 0}
+
+/* ---------- a gate ---------- */
+.gate{
+  padding:15px 18px;border-bottom:1px solid var(--line-soft);
+  display:grid;grid-template-columns:1fr auto;gap:12px 16px;align-items:start;
+}
+.gate:last-child{border-bottom:0}
+.gate.hard{background:linear-gradient(90deg,rgba(234,106,84,.05),transparent 60%)}
+.gtext{min-width:0}
+.gtitle{
+  font-size:calc(16px * var(--fs));font-weight:650;line-height:1.45;
+  display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+}
+.hardtag{
+  font-family:var(--mono);font-size:calc(10px * var(--fs));font-weight:700;
+  letter-spacing:.12em;color:var(--nogo);border:1px solid var(--nogo);
+  border-radius:3px;padding:1px 6px;text-transform:uppercase;white-space:nowrap;
+}
+.condtag{
+  font-family:var(--mono);font-size:calc(10px * var(--fs));font-weight:700;
+  letter-spacing:.12em;color:var(--faint);border:1px solid var(--line);
+  border-radius:3px;padding:1px 6px;text-transform:uppercase;white-space:nowrap;
+}
+.gaction{
+  margin-top:5px;font-family:var(--mono);font-size:calc(13px * var(--fs));
+  color:var(--muted);letter-spacing:.01em;
+}
+.gaction code{
+  background:var(--panel2);border:1px solid var(--line);border-radius:3px;
+  padding:1px 5px;color:var(--amber);font-size:.94em;
+}
+.gwhy{
+  margin-top:9px;
+}
+.gwhy summary{
+  cursor:pointer;font-family:var(--mono);font-size:calc(11.5px * var(--fs));
+  letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
+  list-style:none;display:inline-flex;align-items:center;gap:6px;user-select:none;
+}
+.gwhy summary::-webkit-details-marker{display:none}
+.gwhy summary:hover{color:var(--caution)}
+.gwhy summary .plus{color:var(--caution);font-weight:700}
+.gwhy[open] summary .plus::after{content:'–'}
+.gwhy summary .plus::after{content:'+'}
+.gwhy .body{
+  margin-top:9px;padding:12px 14px;background:var(--panel);
+  border:1px solid var(--line);border-left:3px solid var(--caution);border-radius:5px;
+  font-size:calc(14px * var(--fs));color:var(--muted);
+}
+.gwhy .body .ref{
+  display:block;margin-top:8px;font-family:var(--mono);
+  font-size:calc(11px * var(--fs));color:var(--nogo);letter-spacing:.06em;
+}
+.speak{
+  margin-top:8px;background:transparent;border:1px solid var(--line);
+  color:var(--faint);border-radius:4px;padding:5px 10px;cursor:pointer;
+  font-family:var(--mono);font-size:calc(11px * var(--fs));letter-spacing:.08em;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.speak:hover{border-color:var(--caution);color:var(--caution)}
+.speak.speaking{border-color:var(--caution);color:var(--caution);background:rgba(232,193,90,.08)}
+
+/* three-state control */
+.gpick{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{
+  border:0;background:var(--panel);color:var(--faint);cursor:pointer;
+  font-family:var(--mono);font-size:calc(13px * var(--fs));font-weight:700;
+  letter-spacing:.06em;padding:11px 0;width:62px;transition:all .13s;
+  border-right:1px solid var(--line);
+}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--panel2);color:var(--text)}
+.seg button[aria-pressed="true"].pass{background:var(--go);color:#0B140E}
+.seg button[aria-pressed="true"].fail{background:var(--nogo);color:#160A08}
+.seg button[aria-pressed="true"].na{background:var(--na);color:#0B1016}
+.gstate{
+  text-align:center;font-family:var(--mono);font-size:calc(11px * var(--fs));
+  letter-spacing:.1em;text-transform:uppercase;color:var(--faint);min-height:1.1em;
+}
+.gate.st-pass .gstate{color:var(--go)}
+.gate.st-fail .gstate{color:var(--nogo)}
+.gate.st-na   .gstate{color:var(--na)}
+
+/* ---------- final authorization ---------- */
+.auth{margin:34px auto 0;max-width:820px;padding:0 20px}
+.authcard{
+  border:1px solid var(--line);border-radius:8px;background:var(--panel);
+  padding:24px 24px 26px;
+}
+.authcard h2{
+  margin:0 0 4px;font-size:calc(15px * var(--fs));font-weight:800;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--amber);
+}
+.authcard .sub{font-family:var(--mono);font-size:calc(12px * var(--fs));color:var(--faint);letter-spacing:.06em;margin:0 0 16px}
+#reasons{list-style:none;padding:0;margin:0 0 18px}
+#reasons li{
+  padding:11px 14px;border-radius:5px;margin-bottom:8px;
+  font-size:calc(14.5px * var(--fs));display:flex;gap:11px;align-items:flex-start;
+}
+#reasons li .ic{flex:0 0 auto;font-family:var(--mono);font-weight:700}
+#reasons li.block{background:var(--nogo-soft);border:1px solid rgba(234,106,84,.4);color:var(--text)}
+#reasons li.block .ic{color:var(--nogo)}
+#reasons li.pend{background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+#reasons li.pend .ic{color:var(--faint)}
+#reasons li.clear{background:var(--go-soft);border:1px solid rgba(95,207,138,.4);color:var(--text)}
+#reasons li.clear .ic{color:var(--go)}
+.authactions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.bigbtn{
+  font-family:var(--mono);font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  border-radius:6px;padding:14px 26px;cursor:pointer;font-size:calc(14px * var(--fs));
+  border:1.5px solid;transition:all .15s;
+}
+.bigbtn.log{background:var(--go);color:#0B140E;border-color:var(--go)}
+.bigbtn.log:disabled{background:var(--panel);color:var(--faint);border-color:var(--line);cursor:not-allowed}
+.bigbtn.log:not(:disabled):hover{filter:brightness(1.08)}
+.bigbtn.reset{background:transparent;color:var(--muted);border-color:var(--line)}
+.bigbtn.reset:hover{border-color:var(--nogo);color:var(--nogo)}
+.authstamp{
+  margin-top:16px;font-family:var(--mono);font-size:calc(12.5px * var(--fs));
+  color:var(--go);letter-spacing:.04em;white-space:pre-wrap;line-height:1.7;
+  border-top:1px solid var(--line);padding-top:14px;display:none;
+}
+.authstamp.show{display:block}
+
+footer{
+  max-width:820px;margin:30px auto 0;padding:20px;
+  border-top:1px solid var(--line);color:var(--faint);
+  font-family:var(--mono);font-size:calc(11.5px * var(--fs));letter-spacing:.06em;line-height:1.8;
+}
+footer b{color:var(--muted)}
+</style>
+
+<div class="classbar">unclassified // nemyx air wing // pre-flight readiness gate</div>
+
+<header>
+  <div class="hrow">
+    <div class="mark">
+      <!-- raven crest -->
+      <svg width="40" height="40" viewBox="0 0 72 72" aria-hidden="true">
+        <circle cx="36" cy="36" r="25" fill="none" stroke="#F4A63A" stroke-width="1.5" opacity=".85"/>
+        <circle cx="36" cy="36" r="20" fill="#F4A63A" opacity=".1"/>
+        <path d="M20 44 Q28 34 35 33 Q40 32 43 28 Q45 25 49 24 L47 27 L52 26 L48 30
+                 Q46 36 40 39 Q34 42 30 46 Q26 50 24 49 Q27 45 25 45 Q22 46 20 44 Z" fill="#F4A63A"/>
+      </svg>
+      <div class="name"><b>ERNA · Go / No-Go</b><span id="tailnote">before you arm</span></div>
+    </div>
+    <div class="verdict">
+      <div class="vpill v-incomplete" id="vpill"><span class="ico">◇</span><span id="vtext">INCOMPLETE</span></div>
+      <div class="vsub" id="vsub">0 of 0 gates cleared</div>
+    </div>
+  </div>
+  <div class="progress">
+    <div class="ptrack"><div class="pfill" id="pfill"></div></div>
+    <div class="pmeta"><span id="pleft">Pending review</span><span id="pright">—</span></div>
+  </div>
+</header>
+
+<div class="tools">
+  <button class="tbtn" id="expandAll">⊕ Expand all why</button>
+  <button class="tbtn" id="fontToggle">A+ Larger text</button>
+  <button class="tbtn" id="voiceToggle">🔊 Read gates aloud</button>
+  <span class="spacer"></span>
+  <button class="tbtn" id="jumpNext">↧ Next open gate</button>
+</div>
+
+<div class="lede">
+  <div class="card">
+    <p><b>This gate is built from your own flight logs.</b> Every hard-stop below traces to a crash you already paid for — the 04-29 and 04-30 compass cascades, the cal-poisoning incident, the motor-floor limit cycle. Work top to bottom. You cannot reach <b>GO</b> while anything reads FAIL or is still pending. A hard-stop FAIL pins the aircraft to the ground, no override. Souls first.</p>
+  </div>
+</div>
+
+<main id="phases"></main>
+
+<div class="auth">
+  <div class="authcard">
+    <h2>Flight Authorization</h2>
+    <p class="sub">The board decides. You confirm.</p>
+    <ul id="reasons"></ul>
+    <div class="authactions">
+      <button class="bigbtn log" id="logBtn" disabled>▣ Authorize &amp; stamp</button>
+      <button class="bigbtn reset" id="resetBtn">↺ Reset for next flight</button>
+    </div>
+    <div class="authstamp" id="stamp"></div>
+  </div>
+</div>
+
+<footer>
+  <b>ERNA Pre-Flight Go / No-Go Gate.</b> Offline field instrument — no network, no dependencies. State is saved on this device between flights.<br>
+  Encoded from your memory: compass-canary (logs 076/080), cal-poisoning (2026-06-04), Cube-2 motor floor (log 19), RNGFND/VISO/clock traps, follow-drone pigpio cutout.<br>
+  Built max-effort by Claude Fable 5 · 2026-07-03 · that others may live.
+</footer>
+
+<script>
+'use strict';
+/* =====================================================================
+   GATE DATA — every item is a real ERNA lesson.
+   hard:true  = hard-stop. FAIL = grounded, pinned to top of NO-GO reasons.
+   cond:true  = conditional. N/A is a legitimate answer when it doesn't apply.
+   ===================================================================== */
+const PHASES = [
+  { id:'p1', title:'Power-Up & Bench', gates:[
+    { id:'crashdump', hard:false, cond:true,
+      title:'CrashDump cleared if the Cube ever hard-faulted',
+      action:'A power-cycle does NOT clear it — VBAT keeps the backup SRAM alive. Only a reflash wipes it. Run <code>~/reflash.sh</code> (~60s).',
+      why:'The crashdump lives in the STM32 backup SRAM on the coin cell. <code>Arm:</code>-prefix checks like this are not bitmaskable via ARMING_CHECK — you can\'t clear the bit, you have to fix the root. Reflash\'s erase step is the only reliable wipe.',
+      ref:'ERNA flight-ready bring-up 2026-04-24' },
+    { id:'discmsk', hard:false, cond:true,
+      title:'New / reflashed Cube: COMPASS_DISBLMSK set FIRST',
+      action:'Every Cube ships with the internal mag enabled; near the PDB it reads garbage. Set <code>COMPASS_DISBLMSK=352</code> before anything else, then cal.',
+      why:'On the Cube-2 build the internal mag swung 160–404 mGauss against the Here4\'s rock-steady 306 → "Compasses inconsistent". A reflash resets DISBLMSK so the internal mag silently comes back into PRIO1 — the exact regression that produced bad cals. Flash → DISBLMSK=352 → then everything else. Never relax COMPASS_CAL_FIT to force a bad cal through.',
+      ref:'Cube-2 vibe/compass fix · internal-compass regression' },
+    { id:'rngfnd', hard:false, cond:false,
+      title:'Down-lidar proven: RANGEFINDER msg from the Cube reads distance > 0',
+      action:'<code>RNGFND1_TYPE=10</code> (MAVLink enum in AC 4.6, NOT 8). DISTANCE_SENSOR reaching a companion proves nothing — only the Cube emitting RANGEFINDER with distance>0 proves it.',
+      why:'Type 8 in AC 4.6 is LightWareI2C, which silently consumes nothing off the MAVLink bus — hours of "Rangefinder 1: No Data". Also confirm the down DISTANCE_SENSOR has id=0 (backend matches packet.id to instance) and MAV_DIST_SENSOR type=LASER(0), not UNKNOWN(4) which ArduPilot drops.',
+      ref:'ERNA flight-ready bring-up 2026-04-24' },
+    { id:'forcealt', hard:true, cond:false,
+      title:'pixel_cal.json force_alt_m = 0',
+      action:'Open <code>/home/orin/.config/erna/pixel_cal.json</code>. <code>force_alt_m</code> must be 0. It is a hot-reload field that silently survives bench/demo sessions.',
+      why:'force_alt_m=10.0 was left set after a demo. It overrides REAL altitude unconditionally — in flight too. At 30 m AGL it places every target at one-third the true distance. A poisoned target is worse than no target: it sends the helicopter to the wrong table. Hard stop.',
+      ref:'Pixel-lock targeting audit 2026-06-03' },
+    { id:'viso', hard:false, cond:false,
+      title:'VISO_TYPE correct for tonight\'s build',
+      action:'No VIO tonight → <code>VISO_TYPE=0</code>. Running the OAK-D VIO build → 1. Don\'t touch VISO_* otherwise.',
+      why:'A stale VISO_TYPE=1 (leftover from vision-positioning experiments) throws a hard <code>PreArm: VisOdom: not healthy</code> that blocks arming even with every other sensor green. Same phantom-source family as the stale SRC junk — these silently re-enable across param restores.',
+      ref:'VISO_TYPE must be 0 (2026-05-02)' },
+  ]},
+
+  { id:'p2', title:'Compass — The Killer', gates:[
+    { id:'magcal', hard:false, cond:false,
+      title:'All 3 compasses calibrated in Mission Planner (not QGC)',
+      action:'Cal at the flight site, <b>battery disconnected, USB power only</b> to kill current-path bias. Use Mission Planner.',
+      why:'MP and QGC both pass the radius check, but only MP\'s cal (log 079) left a usable compass-1 the EKF could fall back to mid-flight when compass-0 went bad — that fallback saved the flight. QGC\'s cal (log 078) left compass-1 unusable; when compass-0 had a yaw anomaly the EKF couldn\'t fall back and the drone tipped. Same airframe, same site — only the GCS differed.',
+      ref:'Pre-arm mag feedback · logs 078/079' },
+    { id:'xydiff', hard:true, cond:false,
+      title:'Pre-arm shows NO "Check mag field (xy diff > 100)"',
+      action:'If you see it, do NOT arm. Redo cal battery-off at the site. If repeated cals fail, MAGFIT: fly a figure-8 in LOITER 30s, then MAGFit the log.',
+      why:'2026-04-29 (log 076): pre-arm reported xy diff 173>100. Armed anyway. 63 seconds in, the EKF announced "in-flight yaw alignment complete" for all 3 IMUs — it had just discovered its own heading was wrong, mid-air. Roll error peaked at 204° (inverted), crash detector tripped. Optical flow was healthy the whole time; the compass chain killed it. This warning is the canary. It is a hard stop.',
+      ref:'CRASH 2026-04-29 log 076 · CRASH 2026-04-30 log 080' },
+    { id:'magswing', hard:true, cond:false,
+      title:'Props OFF, throttle ramp: |MAG| swings under 5%',
+      action:'Props removed. Ramp throttle on USB power, watch live |MAG|. Over 5% swing = compass too close to the power wiring. Fix the routing before you fly.',
+      why:'Log 080 (2026-04-30): |MAG| went from a 330 mGauss ground baseline to 538 mGauss spikes at high throttle — a 60% swing earth\'s field cannot produce. EKF lost heading, bounced between GPS and dead-reckoning, and the final EKF position was 120 m off GPS truth at landing. Throttle-correlated mag swing means the wiring, not the sky, is driving your compass.',
+      ref:'CRASH 2026-04-30 log 080' },
+    { id:'magofs', hard:false, cond:false,
+      title:'Compass offsets all under 200 mGauss',
+      action:'Check OFS_X/Y/Z on all instances. On log 080 they were all past 200 (−226, −241, −253, 313) — marginal before takeoff.',
+      why:'Large offsets mean the cal is compensating for a lot of nearby steel/current and has little margin left before it goes non-linear under load. Marginal offsets were a precondition of both crash cascades.',
+      ref:'CRASH 2026-04-30 log 080' },
+    { id:'flowcal_order', hard:false, cond:true,
+      title:'Not running OptFlow cal until compass is healthy',
+      action:'If tonight includes a flow cal: take off in LOITER with SRC1=GPS (button OFF), hold ~2 m, trigger RC option 158, land. Never cal flow on a sick compass.',
+      why:'Flow cal compares EKF body-frame velocity against flow rates. If SRC1 is OPTFLOW the reference and the input are the same signal — circular, exactly the 2026-04-30 setup. With SRC1=GPS the reference is independent. And yaw error puts the velocity vector in the wrong frame, biasing FLOW_FXSCALER/FYSCALER. Compass first, always.',
+      ref:'Flow calibration workflow (2026-05-02)' },
+  ]},
+
+  { id:'p3', title:'Config Sanity', gates:[
+    { id:'srcjunk', hard:false, cond:false,
+      title:'EKF source params clean — no phantom sources',
+      action:'Audit for junk that re-enables across restores: <code>EK3_SRC2_VELXY</code> (wheel encoder — doesn\'t exist), <code>EK3_SRC1_VELZ=3</code> (flow can\'t measure vertical velocity), <code>EK3_SRC_OPTIONS=1</code> (FuseAllVelocities fuses the garbage). Clear them.',
+      why:'On log 080 SRC2_VELXY=5 (a wheel encoder that isn\'t on the aircraft) plus FuseAllVelocities meant the EKF was fusing pure garbage into its velocity estimate. Stale Beacon junk in SRC3 was on there too. These phantom-source params silently reappear after any param restore — audit after every rebuild.',
+      ref:'CRASH 2026-04-30 · flow workflow' },
+    { id:'motorfloor', hard:false, cond:false,
+      title:'Hover throttle sits ABOVE MOT_SPIN_MIN',
+      action:'This airframe is overpowered — it hovers around 12–13%. If MOT_SPIN_MIN is 0.15, a motor is pinned at the floor. Current known-good: <code>MOT_SPIN_MIN=0.10</code>, harmonic notch at 95 Hz.',
+      why:'The "really bad vibration" on Cube-2 wasn\'t vibration — VIBE metrics were fine. It was a ~10 Hz roll-axis limit cycle: hover demand fell below the 0.15 motor floor, pinning ≥1 motor 32% of the flight. Dropping SPIN_MIN to 0.10 + soft PIDs + the 95 Hz notch took the 10 Hz roll peak from 90 to 3 and the motor floor from 32% to 3%.',
+      ref:'Cube-2 vibe/compass fix · log 19' },
+    { id:'battmon', hard:false, cond:false,
+      title:'Battery monitor state known — and your reserve planned',
+      action:'If BATT_MONITOR=0 (sensor damaged), there is NO arm voltage check and NO low-voltage failsafe. You are the failsafe. Set a hard time/altitude reserve before you launch.',
+      why:'BATT_MONITOR was disabled because the sensor gave bogus voltage. That\'s a legitimate config — but it means nothing will catch a low pack for you. Fly the clock, not the gauge, until the sensor is fixed.',
+      ref:'ERNA flight-ready bring-up 2026-04-24' },
+  ]},
+
+  { id:'p4', title:'GPS · Time · Ground Station', gates:[
+    { id:'clock', hard:false, cond:false,
+      title:'Drone clock synced this boot',
+      action:'The drone Pi5 has no RTC. Confirm <code>erna-clock-sync.service</code> is active. If it failed, mission_chain will silently abort on "state stale".',
+      why:'2026-05-17: mission_chain kept aborting with "state stale (3418.7s)" — the drone clock was 57 minutes behind. Pi5 A gates the mission on clock age; a large skew reads as stale and aborts. The sync pulls UTC from Pi5 A over Doodle on boot, before the relay services.',
+      ref:'Drone clock sync on boot (2026-05-17)' },
+    { id:'gcsfix', hard:true, cond:true,
+      title:'Cal flight: GCS powered FIRST, u-blox warm, tunnel shows fix ≥3 / sats ≥6',
+      action:'Power the GCS first and let the u-blox warm before any Pixel Cal press. Verify real lat/lon in the tunnel feed — do not trust the map\'s "GCS fix" pill alone.',
+      why:'2026-06-04 cal-poisoning: the GCS tunnel carried fix-valid packets with lat/lon = (0,0) — null island. AUTOFIT only checked "better than current", so garbage-vs-garbage "improved" and it rewrote pixel_cal.json mid-flight — 59°/304° walked to 15°/174°, RMS 11,611 km. The "GCS fix" pill keys off fix/sats only and showed GREEN the entire time the coords were zero. Hard stop for cal flights.',
+      ref:'Cal-poisoning incident 2026-06-04' },
+  ]},
+
+  { id:'p5', title:'Follow Drone (if flying the pair)', gates:[
+    { id:'pigpio', hard:false, cond:true,
+      title:'First mission after a full reboot — or ch14 PPM-reset flipped',
+      action:'The follow drone cuts out mid-mission as Pi Zero pigpio wave-state accumulates. First mission after a full reboot is clean. Otherwise flip <b>ch14</b> and wait for the "PPM READY" banner.',
+      why:'The cutout is at a random point and a full reboot makes the first mission 100% clean — that signature is accumulating state a reboot clears, not a weak RF link. Leading cause: orphaned pigpiod wave-state glitches the PPM → ELRS/Betaflight RXLOSS failsafe → cut. ch14 restarts pigpiod then the executor (reboot-equivalent) without touching the rest.',
+      ref:'Follow-drone cutout (OPEN) · ch14 macro' },
+  ]},
+
+  { id:'p6', title:'Environment & Final Arming', gates:[
+    { id:'downtilt', hard:false, cond:true,
+      title:'Camera downtilt 20–30° if target range matters',
+      action:'The 2026-06-04 flat remount (depression 0) means targets must be below the horizon line and range accuracy degrades fast with distance. Tilt down 20–30° for ranged targeting.',
+      why:'With a level camera, small angle errors become large range errors, and center_lock correctly refuses (target above horizon). Fine for overhead work; bad for standoff geolocation. Match the tilt to tonight\'s job.',
+      ref:'Pixel-lock audit · flat remount 2026-06-04' },
+    { id:'wind', hard:false, cond:false,
+      title:'Wind within the airframe\'s envelope',
+      action:'Check sustained and gusts against what this aircraft holds. A GPS-denied hover has less margin than you think when the compass is already working hard.',
+      why:'Wind loads the attitude controller and, on a marginal compass, throttle-correlated current draw feeds straight back into the mag-swing failure mode. Calm air is free insurance on a SAR launch.',
+      ref:'operator judgment' },
+    { id:'area', hard:false, cond:false,
+      title:'Area and airspace clear — bystanders, obstacles, RTL path',
+      action:'Confirm the launch/land area, the RTL climb and path home, and that no one is under the aircraft. Know what she does on failsafe.',
+      why:'ERNA is a swarm-lead overwatch platform, not a toy. The single most controllable risk on any SAR launch is what\'s under and around the aircraft at the moment of arm.',
+      ref:'operator judgment' },
+    { id:'reserve', hard:false, cond:false,
+      title:'Pack charged, reserve set, RTB trigger agreed',
+      action:'Full pack (or a known state), a hard reserve (time or altitude), and a decision now — before launch — for what sends her home.',
+      why:'She came home on reserve out of the black on 06-04 because the reserve was real. Decide the abort before you\'re invested in the search; the temptation to stretch it is strongest exactly when you shouldn\'t.',
+      ref:'operator judgment' },
+  ]},
+];
+
+/* ---------- state ---------- */
+const KEY = 'erna_preflight_v1';
+let state = {};      // gateId -> 'pass' | 'fail' | 'na'
+try { state = JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ state = {}; }
+function persist(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+
+const ALL_GATES = PHASES.flatMap(p => p.gates);
+const el = (t,c,h)=>{ const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
+
+/* ---------- render ---------- */
+const phasesEl = document.getElementById('phases');
+PHASES.forEach((p, pi)=>{
+  const sec = el('section','phase'); sec.id = 'ph-'+p.id;
+  const head = el('button','phead');
+  head.type='button';
+  head.innerHTML =
+    `<span class="pnum">PHASE ${pi+1}</span>
+     <span class="ptitle">${p.title}</span>
+     <span class="pstat" id="stat-${p.id}"></span>
+     <span class="chev">▾</span>`;
+  head.addEventListener('click', ()=> sec.classList.toggle('collapsed'));
+  sec.appendChild(head);
+
+  const list = el('div','plist');
+  p.gates.forEach(g=>{
+    const gate = el('div','gate'+(g.hard?' hard':'')); gate.id='g-'+g.id;
+    const tags = (g.hard?'<span class="hardtag">Hard stop</span>':'') +
+                 (g.cond?'<span class="condtag">Conditional</span>':'');
+    gate.innerHTML =
+      `<div class="gtext">
+         <div class="gtitle">${g.title}${tags}</div>
+         <div class="gaction">${g.action}</div>
+         <details class="gwhy">
+           <summary><span class="plus"></span> Why — the lesson</summary>
+           <div class="body">${g.why}<span class="ref">↳ ${g.ref}</span>
+             <div><button class="speak" data-gid="${g.id}">🔊 Read aloud</button></div>
+           </div>
+         </details>
+       </div>
+       <div class="gpick">
+         <div class="seg" role="group" aria-label="${g.title} status">
+           <button class="pass" data-gid="${g.id}" data-v="pass"  aria-pressed="false">PASS</button>
+           <button class="fail" data-gid="${g.id}" data-v="fail"  aria-pressed="false">FAIL</button>
+           <button class="na"   data-gid="${g.id}" data-v="na"    aria-pressed="false">N/A</button>
+         </div>
+         <div class="gstate" id="gs-${g.id}"></div>
+       </div>`;
+    list.appendChild(gate);
+  });
+  sec.appendChild(list);
+  phasesEl.appendChild(sec);
+});
+
+/* ---------- interactions ---------- */
+phasesEl.addEventListener('click', e=>{
+  const b = e.target.closest('button.seg > *, .seg button');
+  if(!b || !b.dataset.gid) return;
+  const {gid, v} = b.dataset;
+  state[gid] = (state[gid] === v) ? undefined : v;   // toggle off if same
+  if(state[gid] === undefined) delete state[gid];
+  persist(); refresh();
+});
+phasesEl.addEventListener('click', e=>{
+  const sp = e.target.closest('.speak');
+  if(!sp) return;
+  e.preventDefault();
+  const g = ALL_GATES.find(x=>x.id===sp.dataset.gid);
+  speak(stripTags(g.title + '. ' + g.action + ' Why: ' + g.why), sp);
+});
+
+/* ---------- speech (offline Web Speech API) ---------- */
+let voiceOn = false, curSpeakBtn = null;
+function stripTags(h){ const d=el('div',null,h); return d.textContent.replace(/\s+/g,' ').trim(); }
+function speak(text, btn){
+  if(!('speechSynthesis' in window)){ return; }
+  window.speechSynthesis.cancel();
+  if(curSpeakBtn){ curSpeakBtn.classList.remove('speaking'); }
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = .98; u.pitch = 1;
+  if(btn){ btn.classList.add('speaking'); curSpeakBtn = btn;
+    u.onend = u.onerror = ()=>{ btn.classList.remove('speaking'); if(curSpeakBtn===btn)curSpeakBtn=null; };
+  }
+  window.speechSynthesis.speak(u);
+}
+
+/* ---------- verdict engine ---------- */
+function refresh(){
+  // per-gate visual state
+  ALL_GATES.forEach(g=>{
+    const st = state[g.id];
+    const gate = document.getElementById('g-'+g.id);
+    gate.classList.remove('st-pass','st-fail','st-na');
+    const lbl = document.getElementById('gs-'+g.id);
+    ['pass','fail','na'].forEach(v=>{
+      const btn = gate.querySelector(`[data-v="${v}"]`);
+      btn.setAttribute('aria-pressed', String(st===v));
+    });
+    if(st){ gate.classList.add('st-'+st);
+      lbl.textContent = st==='pass'?'cleared':st==='fail'?'blocking':'not applicable';
+    } else lbl.textContent = 'awaiting';
+  });
+
+  // per-phase rollup
+  PHASES.forEach(p=>{
+    const done = p.gates.filter(g=>state[g.id]).length;
+    const fails = p.gates.filter(g=>state[g.id]==='fail').length;
+    const stat = document.getElementById('stat-'+p.id);
+    if(fails){ stat.style.color='var(--nogo)'; stat.textContent = fails+' blocking'; }
+    else if(done===p.gates.length){ stat.style.color='var(--go)'; stat.textContent = 'clear'; }
+    else { stat.style.color='var(--faint)'; stat.textContent = done+'/'+p.gates.length; }
+  });
+
+  // global tally
+  const decided = ALL_GATES.filter(g=>state[g.id]).length;
+  const total = ALL_GATES.length;
+  const fails = ALL_GATES.filter(g=>state[g.id]==='fail');
+  const hardFails = fails.filter(g=>g.hard);
+  const pending = ALL_GATES.filter(g=>!state[g.id]);
+
+  // progress
+  document.getElementById('pfill').style.width = Math.round(decided/total*100)+'%';
+  document.getElementById('pleft').textContent = decided+' of '+total+' gates reviewed';
+  document.getElementById('pright').textContent = fails.length ? (fails.length+' blocking') : (pending.length ? pending.length+' pending' : 'all reviewed');
+  document.getElementById('vsub').textContent = ALL_GATES.filter(g=>state[g.id]==='pass'||state[g.id]==='na').length+' of '+total+' gates cleared';
+
+  // verdict
+  const pill = document.getElementById('vpill');
+  const vtext = document.getElementById('vtext');
+  pill.className = 'vpill';
+  let verdict;
+  if(fails.length){ verdict='NO-GO'; pill.classList.add('v-nogo'); pill.querySelector('.ico').textContent='✕'; }
+  else if(pending.length){ verdict='INCOMPLETE'; pill.classList.add('v-incomplete'); pill.querySelector('.ico').textContent='◇'; }
+  else { verdict='GO'; pill.classList.add('v-go','armed'); pill.querySelector('.ico').textContent='✓'; }
+  vtext.textContent = verdict;
+
+  // reasons list + authorize button
+  const reasons = document.getElementById('reasons');
+  reasons.innerHTML='';
+  const logBtn = document.getElementById('logBtn');
+  if(verdict==='NO-GO'){
+    // hard fails first, then soft fails
+    [...hardFails, ...fails.filter(g=>!g.hard)].forEach(g=>{
+      reasons.appendChild(rowLi('block', g.hard?'HARD':'FAIL', g.title + (g.hard?' — grounded, no override.':'')));
+    });
+    logBtn.disabled = true;
+  } else if(verdict==='INCOMPLETE'){
+    reasons.appendChild(rowLi('pend','…', pending.length+' gate'+(pending.length>1?'s':'')+' still need a call before the board can clear you.'));
+    // name up to 3 pending, prioritizing hard stops
+    [...pending].sort((a,b)=>(b.hard?1:0)-(a.hard?1:0)).slice(0,4).forEach(g=>{
+      reasons.appendChild(rowLi('pend', g.hard?'HARD':'·', g.title));
+    });
+    logBtn.disabled = true;
+  } else {
+    reasons.appendChild(rowLi('clear','✓','Every gate cleared. Aircraft is authorized to arm.'));
+    logBtn.disabled = false;
+  }
+
+  // update the little tail note
+  document.getElementById('tailnote').textContent =
+    verdict==='GO' ? 'cleared to arm' : verdict==='NO-GO' ? 'grounded — see reasons' : 'before you arm';
+
+  // hide a stale stamp if state changed after authorizing
+  const stamp = document.getElementById('stamp');
+  if(verdict!=='GO') stamp.classList.remove('show');
+}
+function rowLi(cls, ic, text){
+  const li = el('li', cls);
+  li.innerHTML = `<span class="ic">${ic}</span><span>${text}</span>`;
+  return li;
+}
+
+/* ---------- authorize / stamp ---------- */
+document.getElementById('logBtn').addEventListener('click', ()=>{
+  const d = new Date();
+  const p = n=>String(n).padStart(2,'0');
+  const zulu = `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}Z`;
+  const na = ALL_GATES.filter(g=>state[g.id]==='na').map(g=>g.title);
+  const rec =
+`╔═ FLIGHT AUTHORIZATION ═════════════════════
+║  ERNA · NEMYX AIR WING
+║  VERDICT : GO — cleared to arm
+║  STAMP   : ${zulu}
+║  GATES   : ${ALL_GATES.length}/${ALL_GATES.length} reviewed · ${na.length} marked N/A
+${na.length? '║  N/A     : '+na.join('\n║          : ')+'\n':''}║  AUTHORITY: operator, on this board
+╚════════════════════════════════════════════
+that others may live.`;
+  const stamp = document.getElementById('stamp');
+  stamp.textContent = rec;
+  stamp.classList.add('show');
+  // copy to clipboard for the flight log if allowed
+  try{ navigator.clipboard.writeText(rec); }catch(e){}
+  if(voiceOn) speak('Authorized. Cleared to arm. That others may live.');
+  stamp.scrollIntoView({behavior:'smooth', block:'center'});
+});
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  if(!confirm('Reset all gates for the next flight?')) return;
+  state = {}; persist();
+  document.getElementById('stamp').classList.remove('show');
+  refresh();
+  window.scrollTo({top:0, behavior:'smooth'});
+});
+
+/* ---------- tools ---------- */
+let allOpen=false;
+document.getElementById('expandAll').addEventListener('click', function(){
+  allOpen=!allOpen;
+  document.querySelectorAll('.gwhy').forEach(d=> d.open=allOpen);
+  this.classList.toggle('on', allOpen);
+  this.textContent = allOpen?'⊖ Collapse all why':'⊕ Expand all why';
+});
+let big=false;
+document.getElementById('fontToggle').addEventListener('click', function(){
+  big=!big;
+  document.documentElement.style.setProperty('--fs', big?'1.16':'1');
+  this.classList.toggle('on', big);
+  this.textContent = big?'A− Normal text':'A+ Larger text';
+});
+document.getElementById('voiceToggle').addEventListener('click', function(){
+  voiceOn=!voiceOn;
+  this.classList.toggle('on', voiceOn);
+  if(voiceOn){
+    this.textContent='🔊 Voice on — reads gates';
+    speak('Voice on. Tap read aloud on any gate.');
+  } else {
+    this.textContent='🔊 Read gates aloud';
+    if('speechSynthesis' in window) window.speechSynthesis.cancel();
+  }
+});
+document.getElementById('jumpNext').addEventListener('click', ()=>{
+  const next = ALL_GATES.find(g=>!state[g.id]);
+  if(!next){ document.querySelector('.auth').scrollIntoView({behavior:'smooth'}); return; }
+  const sec = document.getElementById('g-'+next.id).closest('.phase');
+  sec.classList.remove('collapsed');
+  document.getElementById('g-'+next.id).scrollIntoView({behavior:'smooth', block:'center'});
+});
+
+refresh();
+</script>

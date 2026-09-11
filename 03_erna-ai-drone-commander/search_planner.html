@@ -1,0 +1,581 @@
+<title>ERNA · SAR Search Planner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+/* =====================================================================
+   ERNA SAR SEARCH PLANNER
+   Plot a datum, choose an IAMSAR pattern, get a real flight plan:
+   waypoints (lat/lon), coverage, timing, and a QGC .waypoints file
+   that loads straight into Mission Planner.
+   Night-ops plotting board — committed dark theme.
+   ===================================================================== */
+:root{
+  --bg:#0B0F15; --bg2:#0F151E; --panel:#131B25; --panel2:#18212E;
+  --line:#233040; --line-soft:#1B2531;
+  --text:#ECEAE3; --muted:#93A2B2; --faint:#5F7286;
+  --amber:#F4A63A; --amber-soft:rgba(244,166,58,.13);
+  --teal:#5FC7BA; --teal-soft:rgba(95,199,186,.14);
+  --go:#5FCf8a; --warn:#E8C15A; --bad:#EA6A54;
+  --mono:ui-monospace,'SF Mono','Cascadia Mono',Consolas,Menlo,monospace;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,Ubuntu,sans-serif;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+html,body{margin:0}
+body{
+  background:radial-gradient(1100px 460px at 70% -10%,#141c27 0,transparent 60%),var(--bg);
+  color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--teal);color:#08110F}
+
+.classbar{
+  text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--teal);background:var(--teal-soft);
+  border-bottom:1px solid rgba(95,199,186,.3);padding:6px 10px 5px;
+}
+header{
+  display:flex;align-items:center;gap:13px;max-width:1240px;margin:0 auto;
+  padding:16px 22px 10px;
+}
+header .name b{display:block;font-size:19px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+header .name span{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
+
+/* layout */
+.grid{
+  max-width:1240px;margin:0 auto;padding:6px 22px 40px;
+  display:grid;grid-template-columns:320px minmax(0,1fr);gap:20px;align-items:start;
+}
+@media (max-width:900px){ .grid{grid-template-columns:1fr} }
+
+/* control panel */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 0;position:sticky;top:12px}
+@media (max-width:900px){ .panel{position:static} }
+.grp{padding:15px 18px;border-bottom:1px solid var(--line-soft)}
+.grp:last-child{border-bottom:0}
+.grp h3{
+  margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--amber);
+}
+.field{margin-bottom:12px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;letter-spacing:.02em}
+.field label .hint{color:var(--faint);font-size:11px}
+input[type=number],input[type=text],select{
+  width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:5px;
+  color:var(--text);font-family:var(--mono);font-size:14px;padding:9px 10px;
+}
+input:focus,select:focus{outline:none;border-color:var(--teal)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.derived{font-family:var(--mono);font-size:12px;color:var(--teal);margin-top:4px}
+/* pattern picker */
+.patgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.patbtn{
+  text-align:left;background:var(--bg2);border:1px solid var(--line);border-radius:6px;
+  padding:10px 11px;cursor:pointer;color:var(--muted);transition:all .13s;
+}
+.patbtn:hover{border-color:var(--faint);color:var(--text)}
+.patbtn.on{border-color:var(--teal);background:var(--teal-soft);color:var(--text)}
+.patbtn b{display:block;font-size:13px;letter-spacing:.03em;margin-bottom:2px}
+.patbtn small{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.04em}
+.patbtn.on small{color:var(--teal)}
+input[type=range]{width:100%;accent-color:var(--teal)}
+.rlabel{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px}
+.rlabel b{color:var(--text)}
+
+/* right column */
+.stage{display:flex;flex-direction:column;gap:16px;min-width:0}
+.plotwrap{position:relative;background:#080C11;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+canvas{display:block;width:100%;height:auto}
+.plotover{
+  position:absolute;top:12px;left:14px;font-family:var(--mono);font-size:11px;
+  color:var(--faint);letter-spacing:.06em;pointer-events:none;line-height:1.7;
+}
+.plotover b{color:var(--teal)}
+
+/* stat tiles */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:13px 15px}
+.tile .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.tile .v{font-size:23px;font-weight:750;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.tile .v small{font-size:13px;color:var(--muted);font-weight:400;margin-left:3px}
+.tile.feas .v{color:var(--go)}
+.tile.feas.warn .v{color:var(--warn)}
+.tile.feas.bad .v{color:var(--bad)}
+.tile .sub{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:3px}
+
+/* feasibility bar */
+.feasbar{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:14px 16px}
+.feasbar .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.feasbar .top .lab{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.feasbar .top .verd{font-family:var(--mono);font-weight:700;letter-spacing:.1em;font-size:14px}
+.ftrack{height:9px;border-radius:5px;background:var(--line-soft);overflow:hidden;position:relative}
+.ffill{height:100%;width:0;border-radius:5px;transition:width .3s,background .3s}
+.fmark{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);opacity:.5}
+.feasbar .note{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:8px;letter-spacing:.03em}
+
+/* table + export */
+.tblcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.tblhead{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--line)}
+.tblhead h3{margin:0;font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber)}
+.exp{display:flex;gap:8px;flex-wrap:wrap}
+.exp button{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
+  background:var(--bg2);border:1px solid var(--line);color:var(--muted);border-radius:5px;
+  padding:7px 12px;cursor:pointer;transition:all .13s;
+}
+.exp button:hover{border-color:var(--teal);color:var(--teal)}
+.exp button.ok{border-color:var(--go);color:var(--go)}
+.tscroll{overflow-x:auto;max-height:340px;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+th,td{padding:7px 14px;text-align:right;font-variant-numeric:tabular-nums}
+th{position:sticky;top:0;background:var(--panel2);color:var(--faint);font-weight:600;
+  font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--line);z-index:1}
+th:first-child,td:first-child{text-align:left}
+tbody tr{border-bottom:1px solid var(--line-soft)}
+tbody tr:hover{background:var(--panel2)}
+td.wp{color:var(--teal)}
+.legwrap{padding-bottom:2px}
+
+footer{max-width:1240px;margin:8px auto 0;padding:16px 22px 30px;color:var(--faint);
+  font-family:var(--mono);font-size:11px;letter-spacing:.05em;line-height:1.8}
+footer b{color:var(--muted)}
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--panel2);border:1px solid var(--teal);color:var(--teal);
+  font-family:var(--mono);font-size:13px;padding:11px 20px;border-radius:6px;
+  opacity:0;transition:all .25s;pointer-events:none;z-index:50;letter-spacing:.04em;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+
+<div class="classbar">unclassified // nemyx air wing // search &amp; rescue mission planner</div>
+
+<header>
+  <svg width="38" height="38" viewBox="0 0 72 72" aria-hidden="true">
+    <circle cx="36" cy="36" r="25" fill="none" stroke="#F4A63A" stroke-width="1.5" opacity=".85"/>
+    <circle cx="36" cy="36" r="20" fill="#F4A63A" opacity=".1"/>
+    <path d="M20 44 Q28 34 35 33 Q40 32 43 28 Q45 25 49 24 L47 27 L52 26 L48 30 Q46 36 40 39 Q34 42 30 46 Q26 50 24 49 Q27 45 25 45 Q22 46 20 44 Z" fill="#F4A63A"/>
+  </svg>
+  <div class="name"><b>SAR Search Planner</b><span>datum → pattern → flight plan</span></div>
+</header>
+
+<div class="grid">
+  <!-- ============ CONTROLS ============ -->
+  <div class="panel">
+    <div class="grp">
+      <h3>Datum · Last Known Position</h3>
+      <div class="row2">
+        <div class="field"><label>Latitude</label><input type="number" id="lat" value="21.38910" step="0.00001"></div>
+        <div class="field"><label>Longitude</label><input type="number" id="lon" value="-157.94100" step="0.00001"></div>
+      </div>
+      <div class="field"><label>Search altitude AGL <span class="hint">m</span></label><input type="number" id="alt" value="40" step="5" min="5"></div>
+    </div>
+
+    <div class="grp">
+      <h3>Pattern</h3>
+      <div class="patgrid" id="patgrid">
+        <button class="patbtn on" data-p="square"><b>Expanding Square</b><small>SS · tight datum</small></button>
+        <button class="patbtn" data-p="sector"><b>Sector Search</b><small>VS · small area</small></button>
+        <button class="patbtn" data-p="parallel"><b>Parallel Track</b><small>PS · large area</small></button>
+        <button class="patbtn" data-p="creeping"><b>Creeping Line</b><small>CS · corridor</small></button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <h3>Sensor Swath</h3>
+      <div class="field">
+        <label>Camera HFOV <span class="hint">deg</span></label>
+        <input type="number" id="hfov" value="66" step="1" min="20" max="150">
+      </div>
+      <div class="field">
+        <div class="rlabel"><span>Sidelap overlap</span><b id="ovLbl">20%</b></div>
+        <input type="range" id="overlap" min="0" max="60" value="20" step="5">
+      </div>
+      <div class="derived" id="swathD">swath — · spacing —</div>
+      <div class="field" style="margin-top:10px">
+        <label>Track spacing override <span class="hint">m · blank = derived</span></label>
+        <input type="number" id="spacingOv" placeholder="derived" step="1" min="1">
+      </div>
+    </div>
+
+    <div class="grp" id="patParams"><!-- pattern-specific, injected --></div>
+
+    <div class="grp">
+      <h3>Aircraft</h3>
+      <div class="row2">
+        <div class="field"><label>Ground speed <span class="hint">m/s</span></label><input type="number" id="speed" value="6" step="0.5" min="1"></div>
+        <div class="field"><label>Endurance <span class="hint">min</span></label><input type="number" id="endur" value="18" step="1" min="1"></div>
+      </div>
+      <div class="field"><label>Orientation / first-leg heading <span class="hint">deg true</span></label><input type="number" id="orient" value="0" step="5" min="0" max="359"></div>
+    </div>
+  </div>
+
+  <!-- ============ STAGE ============ -->
+  <div class="stage">
+    <div class="plotwrap">
+      <canvas id="cv" width="900" height="560"></canvas>
+      <div class="plotover" id="plotover"></div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="feasbar">
+      <div class="top">
+        <span class="lab">Endurance budget</span>
+        <span class="verd" id="feasVerd">—</span>
+      </div>
+      <div class="ftrack"><div class="ffill" id="ffill"></div><div class="fmark" id="fmark"></div></div>
+      <div class="note" id="feasNote"></div>
+    </div>
+
+    <div class="tblcard">
+      <div class="tblhead">
+        <h3>Waypoints</h3>
+        <div class="exp">
+          <button id="expQGC">⧉ Copy .waypoints</button>
+          <button id="dlQGC">↓ Mission Planner file</button>
+          <button id="expCSV">⧉ CSV</button>
+        </div>
+      </div>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>WP</th><th>Lat</th><th>Lon</th><th>Brg°</th><th>Leg m</th><th>Cum m</th><th>ETA</th></tr></thead>
+          <tbody id="wpbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <b>ERNA SAR Search Planner.</b> IAMSAR patterns (SS / VS / PS / CS), local flat-earth geodesy — accurate to ~1 m over a few km. Times are track-length ÷ ground speed and exclude turn-around; treat the endurance budget as a planning margin, not a guarantee.<br>
+  Waypoint export is QGC WPL 110 — loads directly into Mission Planner / QGroundControl. Home line is the datum. Built max-effort by Claude Fable 5 · 2026-07-03.
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ===================== geodesy (local flat-earth) ===================== */
+const D2R=Math.PI/180, R2D=180/Math.PI;
+const MPD_LAT=111320;                      // metres per degree latitude
+function mpdLon(lat){ return 111320*Math.cos(lat*D2R); }
+// ENU metres (E,N) from datum -> lat/lon
+function toLatLon(datum,E,N){
+  return { lat: datum.lat + N/MPD_LAT, lon: datum.lon + E/mpdLon(datum.lat) };
+}
+function bearing(dE,dN){ let b=Math.atan2(dE,dN)*R2D; return (b+360)%360; }
+
+/* ===================== state ===================== */
+let pattern='square';
+const $=id=>document.getElementById(id);
+
+const PARAMS = {
+  square:   { legs:{label:'Rings (each ≈ 1 spacing wider)', id:'rings', min:2, max:24, val:8, step:1} },
+  sector:   { radius:{label:'Sector radius (m)', id:'radius', min:30, max:600, val:150, step:10} },
+  parallel: { width:{label:'Area width — along legs (m)', id:'awidth', min:40, max:1200, val:400, step:20},
+              length:{label:'Area length — across legs (m)', id:'alength', min:40, max:1200, val:300, step:20} },
+  creeping: { width:{label:'Corridor length — along legs (m)', id:'awidth', min:60, max:2000, val:600, step:20},
+              length:{label:'Corridor width — across legs (m)', id:'alength', min:20, max:400, val:120, step:10} },
+};
+
+function renderPatParams(){
+  const p=PARAMS[pattern];
+  let h='<h3>Pattern Size</h3>';
+  for(const k in p){
+    const f=p[k];
+    h+=`<div class="field">
+      <div class="rlabel"><span>${f.label}</span><b id="${f.id}Lbl">${f.val}</b></div>
+      <input type="range" id="${f.id}" min="${f.min}" max="${f.max}" value="${f.val}" step="${f.step}">
+    </div>`;
+  }
+  $('patParams').innerHTML=h;
+  for(const k in p){
+    const f=p[k], inp=$(f.id);
+    inp.addEventListener('input',()=>{ $(f.id+'Lbl').textContent=inp.value; recompute(); });
+  }
+}
+
+/* ===================== swath / spacing ===================== */
+function spacing(){
+  const ov=+$('spacingOv').value;
+  if(ov>0) return ov;
+  const alt=+$('alt').value, hfov=+$('hfov').value, overlap=+$('overlap').value/100;
+  const swath=2*alt*Math.tan(hfov/2*D2R);
+  return Math.max(1, swath*(1-overlap));
+}
+function swathW(){
+  const alt=+$('alt').value, hfov=+$('hfov').value;
+  return 2*alt*Math.tan(hfov/2*D2R);
+}
+
+/* ===================== pattern generators -> [{E,N}] ===================== */
+function genSquare(s,orient){
+  const rings=+($('rings')?.value||8);
+  const N=rings*2;                          // legs
+  const pts=[{E:0,N:0}]; let h=orient, E=0,Nn=0;
+  for(let i=1;i<=N;i++){
+    const len=Math.ceil(i/2)*s;
+    E+=len*Math.sin(h*D2R); Nn+=len*Math.cos(h*D2R);
+    pts.push({E,N:Nn});
+    h=(h-90+360)%360;                        // clockwise box
+  }
+  return pts;
+}
+function genSector(s,orient){
+  const R=+($('radius')?.value||150);
+  const P=(brg)=>({E:R*Math.sin(brg*D2R), N:R*Math.cos(brg*D2R)});
+  const pts=[{E:0,N:0}];
+  for(let t=0;t<3;t++){
+    const b=orient+t*120;
+    pts.push(P(b)); pts.push(P(b+120)); pts.push({E:0,N:0});
+  }
+  return pts;
+}
+function genParallel(s,orient,corridor){
+  const along=+($('awidth')?.value||400);
+  const across=+($('alength')?.value||300);
+  const aU={E:Math.sin(orient*D2R), N:Math.cos(orient*D2R)};       // along legs
+  const cU={E:Math.sin((orient+90)*D2R), N:Math.cos((orient+90)*D2R)}; // step dir
+  const nLegs=Math.max(1, Math.floor(across/s)+1);
+  const pts=[];
+  for(let j=0;j<nLegs;j++){
+    const base={E:cU.E*j*s, N:cU.N*j*s};
+    const far ={E:base.E+aU.E*along, N:base.N+aU.N*along};
+    if(j%2===0){ pts.push(base); pts.push(far); }
+    else       { pts.push(far);  pts.push(base); }
+  }
+  return pts;
+}
+
+function generate(){
+  const s=spacing(), orient=+$('orient').value;
+  if(pattern==='square')   return genSquare(s,orient);
+  if(pattern==='sector')   return genSector(s,orient);
+  if(pattern==='parallel') return genParallel(s,orient,false);
+  if(pattern==='creeping') return genParallel(s,orient,true);
+  return [{E:0,N:0}];
+}
+
+/* ===================== compute + legs ===================== */
+let LAST={pts:[],legs:[],datum:null,dist:0,time:0,s:0};
+function recompute(){
+  const datum={lat:+$('lat').value, lon:+$('lon').value};
+  const alt=+$('alt').value, speed=Math.max(0.1,+$('speed').value);
+  const s=spacing();
+  const pts=generate();
+
+  const legs=[]; let cum=0;
+  for(let i=0;i<pts.length;i++){
+    const ll=toLatLon(datum,pts[i].E,pts[i].N);
+    let leg=0,brg=0;
+    if(i>0){
+      const dE=pts[i].E-pts[i-1].E, dN=pts[i].N-pts[i-1].N;
+      leg=Math.hypot(dE,dN); brg=bearing(dE,dN); cum+=leg;
+    }
+    legs.push({i, lat:ll.lat, lon:ll.lon, leg, brg, cum, eta:cum/speed});
+  }
+  const dist=cum, time=dist/speed;
+  LAST={pts,legs,datum,dist,time,s,alt};
+
+  drawPlot();
+  paintStats();
+  paintTable();
+}
+
+/* ===================== stat tiles + feasibility ===================== */
+function fmtTime(sec){
+  const m=Math.floor(sec/60), ss=Math.round(sec%60);
+  return m+':'+String(ss).padStart(2,'0');
+}
+function paintStats(){
+  const {dist,time,legs,s}=LAST;
+  const swept=(dist*s)/1e4;                 // hectares (approx)
+  const endur=+$('endur').value*60;
+  const pct=time/endur;
+  const cls=pct<=0.75?'':pct<=1?'warn':'bad';
+  $('stats').innerHTML=`
+    <div class="tile"><div class="k">Waypoints</div><div class="v">${legs.length}</div><div class="sub">${legs.length-1} legs</div></div>
+    <div class="tile"><div class="k">Track length</div><div class="v">${(dist/1000).toFixed(2)}<small>km</small></div><div class="sub">${Math.round(dist)} m flown</div></div>
+    <div class="tile"><div class="k">Time on task</div><div class="v">${fmtTime(time)}<small>m:s</small></div><div class="sub">at ${(+$('speed').value)} m/s</div></div>
+    <div class="tile"><div class="k">Track spacing</div><div class="v">${s.toFixed(0)}<small>m</small></div><div class="sub">swath ${swathW().toFixed(0)} m</div></div>
+    <div class="tile feas ${cls}"><div class="k">Swept area</div><div class="v">${swept.toFixed(1)}<small>ha</small></div><div class="sub">≈ ${(swept*2.47).toFixed(1)} ac</div></div>`;
+
+  // feasibility bar
+  const verd = pct<=0.75?'GO · comfortable' : pct<=1?'TIGHT · thin reserve' : 'OVER · exceeds endurance';
+  const col  = pct<=0.75?'var(--go)' : pct<=1?'var(--warn)':'var(--bad)';
+  $('feasVerd').textContent=verd; $('feasVerd').style.color=col;
+  $('ffill').style.width=Math.min(100,pct*100)+'%'; $('ffill').style.background=col;
+  $('fmark').style.left='75%';   // the 75% "plan to be home" line
+  $('feasNote').textContent =
+    `${fmtTime(time)} of ${$('endur').value}:00 endurance used (${Math.round(pct*100)}%). Marker = 75% — plan to be on the pad by there. Excludes turn-around and transit to datum.`;
+}
+
+/* ===================== table ===================== */
+function paintTable(){
+  const b=$('wpbody');
+  b.innerHTML=LAST.legs.map(l=>`<tr>
+    <td class="wp">${l.i===0?'HOME':String(l.i).padStart(2,'0')}</td>
+    <td>${l.lat.toFixed(6)}</td><td>${l.lon.toFixed(6)}</td>
+    <td>${l.i===0?'—':Math.round(l.brg)}</td>
+    <td>${l.i===0?'—':Math.round(l.leg)}</td>
+    <td>${Math.round(l.cum)}</td>
+    <td>${l.i===0?'0:00':fmtTime(l.eta)}</td>
+  </tr>`).join('');
+}
+
+/* ===================== canvas plot ===================== */
+const cv=$('cv'), ctx=cv.getContext('2d');
+function sizeCanvas(){
+  const w=cv.clientWidth, DPR=Math.min(devicePixelRatio||1,2);
+  const h=Math.round(w*0.62);
+  cv.width=w*DPR; cv.height=h*DPR; cv.style.height=h+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  return {w,h};
+}
+function drawPlot(){
+  const {w,h}=sizeCanvas();
+  ctx.clearRect(0,0,w,h);
+  const pts=LAST.pts; if(!pts.length) return;
+
+  // bounds in metres (include swath margin)
+  const s=LAST.s;
+  let minE=1e9,maxE=-1e9,minN=1e9,maxN=-1e9;
+  for(const p of pts){ minE=Math.min(minE,p.E);maxE=Math.max(maxE,p.E);minN=Math.min(minN,p.N);maxN=Math.max(maxN,p.N); }
+  const pad=s*1.2+10;
+  minE-=pad;maxE+=pad;minN-=pad;maxN+=pad;
+  const spanE=Math.max(1,maxE-minE), spanN=Math.max(1,maxN-minN);
+  const margin=44;
+  const sc=Math.min((w-margin*2)/spanE,(h-margin*2)/spanN);
+  const ox=(w-spanE*sc)/2, oy=(h-spanN*sc)/2;
+  // metre -> pixel (N up = screen up)
+  const X=E=>ox+(E-minE)*sc;
+  const Y=N=>h-(oy+(N-minN)*sc);
+
+  // grid every "nice" metre step
+  const step=niceStep(spanE/6);
+  ctx.lineWidth=1; ctx.font='10px ui-monospace,monospace'; ctx.textBaseline='top';
+  ctx.strokeStyle='rgba(35,48,64,.55)'; ctx.fillStyle='#3a4a5c';
+  for(let e=Math.ceil(minE/step)*step; e<maxE; e+=step){
+    ctx.beginPath();ctx.moveTo(X(e),0);ctx.lineTo(X(e),h);ctx.stroke();
+  }
+  for(let n=Math.ceil(minN/step)*step; n<maxN; n+=step){
+    ctx.beginPath();ctx.moveTo(0,Y(n));ctx.lineTo(w,Y(n));ctx.stroke();
+  }
+
+  // coverage swath under the track (translucent, round caps)
+  const swPx=Math.max(2, s*sc);
+  ctx.strokeStyle='rgba(95,199,186,.10)';
+  ctx.lineWidth=swPx; ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(X(pts[0].E),Y(pts[0].N));
+  for(let i=1;i<pts.length;i++) ctx.lineTo(X(pts[i].E),Y(pts[i].N));
+  ctx.stroke();
+
+  // track line
+  ctx.strokeStyle='#5FC7BA'; ctx.lineWidth=2; ctx.lineCap='butt';
+  ctx.beginPath(); ctx.moveTo(X(pts[0].E),Y(pts[0].N));
+  for(let i=1;i<pts.length;i++) ctx.lineTo(X(pts[i].E),Y(pts[i].N));
+  ctx.stroke();
+
+  // direction arrowheads at leg midpoints (sparse)
+  ctx.fillStyle='rgba(95,199,186,.85)';
+  const stepArr=Math.max(1,Math.floor(pts.length/14));
+  for(let i=1;i<pts.length;i+=stepArr){
+    const x1=X(pts[i-1].E),y1=Y(pts[i-1].N),x2=X(pts[i].E),y2=Y(pts[i].N);
+    const mx=(x1+x2)/2,my=(y1+y2)/2,a=Math.atan2(y2-y1,x2-x1);
+    ctx.save();ctx.translate(mx,my);ctx.rotate(a);
+    ctx.beginPath();ctx.moveTo(5,0);ctx.lineTo(-3,-3.2);ctx.lineTo(-3,3.2);ctx.fill();ctx.restore();
+  }
+
+  // waypoints
+  for(let i=0;i<pts.length;i++){
+    const x=X(pts[i].E),y=Y(pts[i].N);
+    if(i===0){ // datum star
+      ctx.fillStyle='#F4A63A'; star(x,y,7,4);
+      ctx.fillStyle='#F4A63A'; ctx.font='700 11px ui-monospace,monospace';
+      ctx.textBaseline='bottom'; ctx.fillText('DATUM',x+10,y-4);
+    } else {
+      ctx.fillStyle='#0B0F15'; ctx.strokeStyle='#5FC7BA'; ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(x,y,3.4,0,7);ctx.fill();ctx.stroke();
+    }
+  }
+  // end marker
+  const last=pts[pts.length-1];
+  ctx.strokeStyle='#EA6A54';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(X(last.E),Y(last.N),7,0,7);ctx.stroke();
+
+  // north arrow
+  ctx.save();ctx.translate(w-30,34);
+  ctx.strokeStyle='#93A2B2';ctx.fillStyle='#93A2B2';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(0,-14);ctx.lineTo(0,10);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,-16);ctx.lineTo(-4,-9);ctx.lineTo(4,-9);ctx.fill();
+  ctx.font='700 10px ui-monospace,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';
+  ctx.fillText('N',0,-17);ctx.restore();ctx.textAlign='left';
+
+  // scale bar
+  const barM=step, barPx=barM*sc;
+  ctx.strokeStyle='#93A2B2';ctx.fillStyle='#93A2B2';ctx.lineWidth=2;
+  const bx=18,by=h-20;
+  ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+barPx,by);
+  ctx.moveTo(bx,by-4);ctx.lineTo(bx,by+4);ctx.moveTo(bx+barPx,by-4);ctx.lineTo(bx+barPx,by+4);ctx.stroke();
+  ctx.font='10px ui-monospace,monospace';ctx.textBaseline='bottom';
+  ctx.fillText(barM>=1000?(barM/1000)+' km':barM+' m',bx,by-6);
+
+  // overlay text
+  $('plotover').innerHTML=`<b>${patName()}</b><br>spacing ${s.toFixed(0)} m · swath ${swathW().toFixed(0)} m<br>${LAST.legs.length} wp · ${(LAST.dist/1000).toFixed(2)} km`;
+}
+function star(x,y,rO,rI){
+  ctx.beginPath();
+  for(let i=0;i<10;i++){ const r=i%2?rI:rO, a=Math.PI/5*i-Math.PI/2;
+    ctx[i?'lineTo':'moveTo'](x+r*Math.cos(a),y+r*Math.sin(a)); }
+  ctx.closePath();ctx.fill();
+}
+function niceStep(x){
+  const p=Math.pow(10,Math.floor(Math.log10(x))), f=x/p;
+  return (f<1.5?1:f<3.5?2:f<7.5?5:10)*p;
+}
+function patName(){return {square:'EXPANDING SQUARE (SS)',sector:'SECTOR SEARCH (VS)',parallel:'PARALLEL TRACK (PS)',creeping:'CREEPING LINE (CS)'}[pattern];}
+
+/* ===================== exports ===================== */
+function qgcText(){
+  const a=+$('alt').value;
+  let out='QGC WPL 110\n';
+  LAST.legs.forEach((l,idx)=>{
+    const cur=idx===0?1:0, frame=idx===0?0:3;   // home = global frame, rest = rel-alt
+    out+=`${idx}\t${cur}\t${frame}\t16\t0\t0\t0\t0\t${l.lat.toFixed(7)}\t${l.lon.toFixed(7)}\t${a}\t1\n`;
+  });
+  return out;
+}
+function csvText(){
+  let out='wp,lat,lon,bearing_deg,leg_m,cum_m,eta_s\n';
+  LAST.legs.forEach(l=>{ out+=`${l.i===0?'HOME':l.i},${l.lat.toFixed(7)},${l.lon.toFixed(7)},${l.i===0?'':Math.round(l.brg)},${Math.round(l.leg)},${Math.round(l.cum)},${Math.round(l.eta)}\n`; });
+  return out;
+}
+function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1700); }
+function copy(txt,msg){ try{navigator.clipboard.writeText(txt);toast(msg);}catch(e){toast('Copy blocked — use the download button');} }
+function download(txt,name){
+  const blob=new Blob([txt],{type:'text/plain'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); toast('Saved '+name);
+}
+$('expQGC').addEventListener('click',()=>copy(qgcText(),'Waypoints copied'));
+$('expCSV').addEventListener('click',()=>copy(csvText(),'CSV copied'));
+$('dlQGC').addEventListener('click',()=>download(qgcText(),'erna_'+pattern+'.waypoints'));
+
+/* ===================== wiring ===================== */
+$('patgrid').addEventListener('click',e=>{
+  const b=e.target.closest('.patbtn'); if(!b)return;
+  pattern=b.dataset.p;
+  document.querySelectorAll('.patbtn').forEach(x=>x.classList.toggle('on',x===b));
+  renderPatParams(); recompute();
+});
+['lat','lon','alt','hfov','spacingOv','speed','endur','orient'].forEach(id=>$(id).addEventListener('input',recompute));
+$('overlap').addEventListener('input',()=>{ $('ovLbl').textContent=$('overlap').value+'%'; recompute(); });
+
+// keep swath readout live
+function refreshSwath(){ $('swathD').textContent=`swath ${swathW().toFixed(1)} m · spacing ${spacing().toFixed(1)} m`; }
+['alt','hfov','overlap','spacingOv'].forEach(id=>$(id).addEventListener('input',refreshSwath));
+
+addEventListener('resize',drawPlot);
+renderPatParams(); refreshSwath(); recompute();
+</script>
