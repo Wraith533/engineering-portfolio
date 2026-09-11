@@ -8,28 +8,7 @@ that proves it, and guard the fallible model with deterministic code.
 📫 william.chadwick.love2@gmail.com · [kaggle.com/wraith53](https://www.kaggle.com/wraith53)
 
 > This repository answers a specific ask: **code samples, a system design I'm proud of, and
-> evaluation/benchmark work that shows technical rigor** — and, honestly, **how I used AI to
-> build it.**
-
----
-
-## How I use AI (answering the P.S. first)
-
-I treat a model as a **fast, fallible executor** and put the engineering around it. My loop is
-the same every time:
-
-1. **Define the real objective** — often by reverse-engineering it.
-2. **Build a validation harness** so iteration is cheap and honest.
-3. **Separate a proposer (the model) from a deterministic executor & verifier** (code I can test).
-4. **Unit-test the parts that must not fail.**
-
-The model moves fast; I own what is true. That loop is why, in my **first-ever Kaggle
-competition** — a $50,000 red-teaming challenge — I placed **2nd out of 4,186** under a
-self-imposed rule that I would not hand-write the solution code. It recurs across this repo: an
-LLM proposes flight commands and a deterministic filter disposes; a pentest agent pairs a
-retrieval-grounded proposer with a 32B→72B verifier loop and 46 unit tests; a fleet
-orchestrator lets a model plan while resilient SSH executes and every fix is logged to a
-knowledge base.
+> evaluation/benchmark work that shows technical rigor.**
 
 ---
 
